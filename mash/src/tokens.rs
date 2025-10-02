@@ -26,43 +26,42 @@ enum Terminator{
 
 impl CommandParams{
     fn execute_statement(commands: Vec<(CommandParams, Terminator)>) -> io::Result<()>{
-        let mut io_out: Option<Stdio> = None;
+        
         let mut all_spawned: VecDeque<Child> = VecDeque::with_capacity(commands.len());
-
+        let mut last_output: Option<Stdio> = None;
         for i in 0..commands.len(){
             let command: &CommandParams;
-            let terminator_before: &Terminator;
             let terminator_after: &Terminator;
-            if i == 0{
-                terminator_before = &Terminator::None;
-            }
-            else { terminator_before = &commands[i - 1].1}
+            //Referenced for borrow checker, so it's not dropped by calling functions to it
+            let last_output = &mut last_output;
             terminator_after = &commands[i].1;
             command = &commands[i].0;
 
-            let mut input_from: Option<Stdio> = None;
-            let mut output_to: Option<Stdio> = None;
-
-            if *terminator_before == Terminator::Pipe {
-                input_from = io_out.take();
+            let mut executable = &mut Command::new(&command.invoking);
+            executable = executable.args(&command.args);
+            if let Some(stdin) = last_output.take(){
+                executable = executable.stdin(stdin);
             }
 
-            if *terminator_after == Terminator::Pipe {
-                output_to = Some(Stdio::piped());
-            }
-
-            let mut child = command.exec_self::<Stdio>(input_from, output_to)?;
-
-            if *terminator_after == Terminator::Pipe {
-                io_out = Some(child.stdout.take().expect("Error grabbing a process's stdout").into());
-            } else {
-                io_out = None;
-            }
             
-            all_spawned.push_back(child);
+            if *terminator_after == Terminator::Pipe{
+                executable = executable.stdout(Stdio::piped());
+            }
+            else {
+                executable = executable.stdout(Stdio::inherit());
+            }
+            let mut child = executable.spawn()?;
+            if *terminator_after == Terminator::Pipe{
+                let stdout = child.stdout.take().unwrap();
+                *last_output = Some(Stdio::from(stdout));
+            }
+            else {
+                *last_output = None;
+            }
+            all_spawned.push_back(child);        
         }
         //EXIT SIGNAL HERE
-        'continuous: loop{
+        'outer: loop{
             let mut i = 0;
             while i < all_spawned.len() {
                 if all_spawned[i].try_wait()?.is_some() {
@@ -72,26 +71,11 @@ impl CommandParams{
                     i += 1;
                 }
             }
+            if all_spawned.len() == 0{
+                break 'outer;
+            }
         }
         return Ok(());
-    }
-
-    /// THIS COMMAND ASSUMES THE INPUT_FROM PIPE IS STILL ACTIVE ON CALL-TIME
-    fn exec_self<T>(&self, input_from: Option<T>, output_to: Option<T>) -> std::io::Result<Child>
-    where T: Into<Stdio>
-    {
-        let mut exec = Command::new(&self.invoking);
-        exec.args(&self.args);
-
-        if let Some(stdin) = input_from {
-            exec.stdin(stdin.into());
-        }
-
-        if let Some(stdout) = output_to {
-            exec.stdout(stdout.into());
-        }
-
-        exec.spawn()
     }
 }
 
@@ -104,17 +88,17 @@ mod tests{
     
     #[test]
     fn test_commands(){
-        let SampleLs: CommandParams = CommandParams{
-            invoking: PathBuf::from("/usr/bin/ls"),
-            args: vec!["-l".to_string()]
+        let sample_ls: CommandParams = CommandParams{
+            invoking: PathBuf::from("/bin/cat"),
+            args: vec!["/Users/jerem-mac/djkw.circ".to_string()]
         };
 
-        let SampleGrep: CommandParams = CommandParams { 
+        let sample_grep: CommandParams = CommandParams { 
             invoking: PathBuf::from("/usr/bin/grep"), 
-            args: vec!["rs".to_string()]
+            args: vec!["text".to_string()]
         };
 
-        let command_list = vec![(SampleLs, Terminator::None), (SampleGrep, Terminator::Pipe)];
+        let command_list = vec![(sample_ls, Terminator::Pipe), (sample_grep, Terminator::EndCmd)];
         CommandParams::execute_statement(command_list).unwrap();
     }
 }
