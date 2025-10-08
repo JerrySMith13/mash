@@ -115,7 +115,7 @@ impl CommandParams{
                         }
                     );
                 }
-                if mode != TokenizeMode::Arg{
+                if mode != TokenizeMode::Arg || mode != TokenizeMode::Command{
                     return Err(
                         ParseErr { 
                             kind: ParseErrKind::TerminatorTooEarly,
@@ -124,7 +124,13 @@ impl CommandParams{
                          }
                     )
                 }
-                unfinished_command.args.push(Self::parse_arg(&mut current_buf));
+                if mode == TokenizeMode::Arg{
+                    unfinished_command.args.push(Self::parse_arg(&mut current_buf));
+                }
+                else {
+                    unfinished_command.invoking = Self::parse_arg(&mut current_buf).into();
+                }
+                
                 let term: Terminator;
                 match char{
                     '|' => {
@@ -165,6 +171,9 @@ impl CommandParams{
                             invoking_set = true;
                         }
                     }
+                    else{
+                        current_buf.push(char)
+                    };
                 },
                 TokenizeMode::Command => {
                     let is_empty = current_buf.is_empty();
@@ -252,6 +261,9 @@ impl CommandParams{
                 }
             }
 
+        }
+        if invoking_set == true{
+            full_command.push((unfinished_command, Terminator::None));
         }
         return Ok(full_command);
     
