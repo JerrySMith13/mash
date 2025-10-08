@@ -4,17 +4,17 @@ use std::process::Stdio;
 use crate::builtins::exec_builtin;
 
 impl CommandParams{
-    fn execute_statement(commands: Vec<(CommandParams, Terminator)>) -> io::Result<()>{
+    pub fn execute_statement(commands: Vec<(CommandParams, Terminator)>) -> io::Result<()>{
         
         let mut all_spawned: VecDeque<Child> = VecDeque::with_capacity(commands.len());
         let mut last_output: Option<Stdio> = None;
         for i in 0..commands.len(){
-            let command: &CommandParams;
-            let terminator_after: &Terminator;
+            let command = &commands[i].0;
+            let terminator_after = &commands[i].1;;
             //Referenced for borrow checker, so it's not dropped by calling functions to it
             let last_output = &mut last_output;
-            terminator_after = &commands[i].1;
-            command = &commands[i].0;
+            
+            
             
             if command.is_builtin{
                 //Verbose errors
