@@ -10,7 +10,7 @@ impl CommandParams{
         let mut last_output: Option<Stdio> = None;
         for i in 0..commands.len(){
             let command = &commands[i].0;
-            let terminator_after = &commands[i].1;;
+            let terminator_after = &commands[i].1;
             //Referenced for borrow checker, so it's not dropped by calling functions to it
             let last_output = &mut last_output;
             
@@ -68,9 +68,6 @@ impl CommandParams{
         return Ok(());
     }
 
-    fn execute_builtin(&self) -> io::Result<()>{
-        return Ok(());
-    }
 }
 
 #[cfg(test)]
